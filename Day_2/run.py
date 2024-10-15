@@ -114,11 +114,11 @@ print(f"Successfully stored {len(splits)} chunks in the vector store.")
 retriever = vectorstore.as_retriever()
 
 # 2. 사용자 쿼리 설정
-user_query = "agent memory"
+#user_query = "agent memory"
 #user_query = "Fig 11 document" # test sample
 
 # 3. 관련된 청크를 벡터 스토어에서 검색
-related_docs = retriever.get_relevant_documents(user_query)
+#related_docs = retriever.get_relevant_documents(user_query)
 
 # 4. 검색된 결과 출력
 # for i, doc in enumerate(related_docs):
@@ -288,7 +288,8 @@ def rag_with_hallucination_check(query, max_attempts=3):
     return None
 
 # 메인 실행 부분
-user_query = "What is agent memory in AI?"  # 예시 쿼리, 실제 사용 시 사용자 입력으로 대체 가능
+#user_query = "What is agent memory in AI?"  # 예시 쿼리, 실제 사용 시 사용자 입력으로 대체 가능
+user_query = input("프롬프트 입력: ")
 final_answer = rag_with_hallucination_check(user_query)
 
 if final_answer:
