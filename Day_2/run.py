@@ -2,7 +2,7 @@ import getpass
 import os
 
 ##정답에 가까운 코드는 day3 6번 챕터에 올라와있음
-
+os.environ['USER_AGENT'] = 'MyApp/1.0.0'
 
 os.environ["OPENAI_API_KEY"] = getpass.getpass()
 
@@ -101,9 +101,112 @@ embeddings = OpenAIEmbeddings(model="text-embedding-3-small")  # 모델 이름�
 vectorstore = Chroma.from_documents(
     documents=splits,  # 청크된 문서들
     embedding=embeddings  # 임베딩 모델
+    #collection_name="rag-chroma" # 이름을 붙여두는게 좋은경우 -> 여러개 vectorstore를 만드는경우 구분, 디폴트는 벡터 스토어가 계속 append되므로 그런경우 다른 종류의 vector가 차원이 다르거나 한데 계속 append됨
 )
 
 # 3. 벡터 스토어 저장 확인
 print(f"Successfully stored {len(splits)} chunks in the vector store.")
 ### 결과
 # Successfully stored 183 chunks in the vector store.
+
+##### 코드: 사용자 쿼리와 관련된 청크 검색
+# 1. Chroma 벡터 스토어에 대한 검색기능을 사용하기 위해 retriever 설정
+retriever = vectorstore.as_retriever()
+
+# 2. 사용자 쿼리 설정
+user_query = "agent memory"
+#user_query = "Fig 11 document" # test sample
+
+# 3. 관련된 청크를 벡터 스토어에서 검색
+related_docs = retriever.get_relevant_documents(user_query)
+
+# 4. 검색된 결과 출력
+# for i, doc in enumerate(related_docs):
+#     print(f"Document {i+1}:")
+#     print(doc.page_content)
+#     print("\n")
+# 결과: 
+# Document 1:
+# Memory stream: is ...
+# Document 2:
+# LLM Powered Autonom ...
+# ...
+
+##### User query와 retrieved chunk 에 대해 relevance 가 있는지를 평가하는 시스템 프롬프트 작성: 
+# retrieval 퀄리티를 LLM 이 스스로 평가하도록 하고, 관련이 있으면 {‘relevance’: ‘yes’} 관련이 없으면 {‘relevance’: ‘no’} 라고 출력하도록 함. ( JsonOutputParser() 를 활용 )
+
+from langchain_core.output_parsers import JsonOutputParser
+
+# JsonOutputParser 설정
+output_parser = JsonOutputParser()
+
+# 시스템 프롬프트 설정
+system_prompt = """
+You are an expert in evaluating the relevance between a user's query and a document chunk. Your task is to assess whether the retrieved chunk is relevant to the query.
+
+Given the user's query and a retrieved document chunk, decide whether the chunk contains information relevant to answering the query.
+
+- If the retrieved chunk is relevant to the query, return the JSON: {"relevance": "yes"}.
+- If the retrieved chunk is not relevant to the query, return the JSON: {"relevance": "no"}.
+
+### Evaluation Criteria:
+1. Check if the document chunk contains any information directly related to the topic or keywords in the user's query.
+2. Consider the context in the chunk and evaluate if it addresses the user's query sufficiently.
+3. Base your evaluation purely on the information provided in the chunk, without adding extra knowledge.
+
+### Input format:
+- Query: "<USER_QUERY>"
+- Document Chunk: "<DOCUMENT_CHUNK>"
+
+### Output format:
+Return your result in a JSON format with a "relevance" key.
+
+### Example:
+
+- Query: "agent memory"
+- Document Chunk: "This document talks about agents using memory to store and recall actions."
+
+Correct output: {"relevance": "yes"}
+
+- Query: "task scheduling"
+- Document Chunk: "This section covers agent memory structures and retrieval."
+
+Correct output: {"relevance": "no"}
+"""
+
+# 함수: 쿼리와 문서 청크 간 관련성 평가
+def evaluate_relevance(user_query, document_chunk):
+    # 프롬프트 생성
+    input_text = f'Query: "{user_query}"\nDocument Chunk: "{document_chunk}"'
+    
+    # LLM을 사용한 평가 (ChatOpenAI 사용)
+    result = llm.invoke(input_text, system_prompt=system_prompt)
+    
+    # JsonOutputParser로 결과 파싱
+    parsed_result = output_parser.parse(result)
+    
+    return parsed_result
+
+# Relevance checker 함수 정의
+from langchain_core.messages import SystemMessage, HumanMessage
+
+def relevance_checker(query, doc_content):
+    # 시스템 메시지와 사용자 메시지 생성
+    system_message = SystemMessage(content=system_prompt)
+    human_message = HumanMessage(content=f'Query: "{query}"\nDocument Chunk: "{doc_content}"')
+    
+    # LLM을 사용한 평가
+    result = llm.invoke([system_message, human_message])
+    
+    # JsonOutputParser로 결과 파싱
+    parsed_result = output_parser.parse(result.content)
+    
+    return parsed_result['relevance']
+
+# 관련성 검사 및 결과 출력
+for i, doc in enumerate(related_docs):
+    relevance = relevance_checker(user_query, doc.page_content)
+    print(f"Document {i+1}:")
+    print(f"Relevance: {relevance}")  # 'yes' 또는 'no' 출력
+    print(doc.page_content)
+    print("\n")
