@@ -204,9 +204,95 @@ def relevance_checker(query, doc_content):
     return parsed_result['relevance']
 
 # 관련성 검사 및 결과 출력
-for i, doc in enumerate(related_docs):
-    relevance = relevance_checker(user_query, doc.page_content)
-    print(f"Document {i+1}:")
-    print(f"Relevance: {relevance}")  # 'yes' 또는 'no' 출력
-    print(doc.page_content)
-    print("\n")
+# for i, doc in enumerate(related_docs):
+#     relevance = relevance_checker(user_query, doc.page_content)
+#     print(f"Document {i+1}:")
+#     print(f"Relevance: {relevance}")  # 'yes' 또는 'no' 출력
+#     print(doc.page_content)
+#     print("\n")
+
+def summarize_relevance(related_docs, user_query):
+    relevance_results = []
+    for doc in related_docs:
+        relevance = relevance_checker(user_query, doc.page_content)
+        relevance_results.append(relevance)
+        print(f"Document Relevance: {relevance}")
+        print(doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content)
+        print("\n")
+
+    if all(result == "no" for result in relevance_results):
+        print("Overall Relevance: No")
+        return "No"
+    elif any(result == "yes" for result in relevance_results):
+        print("Overall Relevance: Yes")
+        return "Yes"
+
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
+from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import SystemMessage, HumanMessage
+
+def generate_answer(query, relevant_docs):
+    context = "\n".join([doc.page_content for doc in relevant_docs])
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="You are a helpful AI assistant. Use the following context to answer the user's question. If you're not sure, say you don't know."),
+        HumanMessage(content=f"Context: {context}\n\nQuestion: {query}")
+    ])
+    response = llm.invoke(prompt.format_prompt().to_messages())
+    return response.content
+
+def hallucination_check(query, answer, relevant_docs):
+    context = "\n".join([doc.page_content for doc in relevant_docs])
+    prompt = ChatPromptTemplate.from_messages([
+        SystemMessage(content="You are an AI designed to detect hallucinations in answers. Compare the given answer to the context and question. If the answer contains information not supported by the context, or if it's not relevant to the question, classify it as a hallucination."),
+        HumanMessage(content=f"Context: {context}\n\nQuestion: {query}\n\nAnswer: {answer}\n\nIs this answer a hallucination? Respond with 'Yes' if it is, or 'No' if it isn't. Explain your reasoning briefly.")
+    ])
+    response = llm.invoke(prompt.format_prompt().to_messages())
+    return response.content
+
+def rag_with_hallucination_check(query, max_attempts=3):
+    related_docs = retriever.invoke(query)
+    relevance_results = []
+    relevant_docs = []
+
+    for doc in related_docs:
+        relevance = relevance_checker(query, doc.page_content)
+        relevance_results.append(relevance)
+        if relevance == "yes":
+            relevant_docs.append(doc)
+        print(f"Document Relevance: {relevance}")
+        print(doc.page_content[:100] + "..." if len(doc.page_content) > 100 else doc.page_content)
+        print("\n")
+
+    if not relevant_docs:
+        print("No relevant documents found. Cannot answer the query.")
+        return None
+
+    for attempt in range(max_attempts):
+        answer = generate_answer(query, relevant_docs)
+        hallucination_result = hallucination_check(query, answer, relevant_docs)
+        
+        if "No" in hallucination_result:
+            print(f"Answer generated (Attempt {attempt + 1}):")
+            print(answer)
+            print("\nHallucination check passed. Returning the answer.")
+            return answer
+        else:
+            print(f"Attempt {attempt + 1} failed hallucination check. Retrying...")
+            print(f"Hallucination check result: {hallucination_result}")
+
+    print(f"Failed to generate a non-hallucinatory answer after {max_attempts} attempts.")
+    return None
+
+# 메인 실행 부분
+user_query = "What is agent memory in AI?"  # 예시 쿼리, 실제 사용 시 사용자 입력으로 대체 가능
+final_answer = rag_with_hallucination_check(user_query)
+
+if final_answer:
+    print("\nFinal Answer to User:")
+    print(final_answer)
+else:
+    print("\nUnable to provide a reliable answer to the query.")
