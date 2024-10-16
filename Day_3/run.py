@@ -3,6 +3,7 @@ import os
 import bs4
 
 os.environ['OPENAI_API_KEY'] = ''
+os.environ['USER_AGENT'] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36"
 
 llm = ChatOpenAI(model="gpt-4o-mini", temperature = 0)
 
@@ -62,9 +63,9 @@ prompt = ChatPromptTemplate.from_messages(
 question_router = prompt | llm | JsonOutputParser()
 
 # question = "llm agent memory"
-question = "What is prompt?"
-docs = retriever.get_relevant_documents(question)
-print(question_router.invoke({"question": question}))
+# question = "What is prompt?"
+# docs = retriever.get_relevant_documents(question)
+# print(question_router.invoke({"question": question}))
 
 ### Retrieval Grader
 from langchain_core.output_parsers import JsonOutputParser
@@ -85,10 +86,10 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 retrieval_grader = prompt | llm | JsonOutputParser()
-question = "What is prompt?"
-docs = retriever.invoke(question)
-doc_txt = docs[0].page_content
-print(retrieval_grader.invoke({"question": question, "document": doc_txt}))
+# question = "What is prompt?"
+# docs = retriever.invoke(question)
+# doc_txt = docs[0].page_content
+# print(retrieval_grader.invoke({"question": question, "document": doc_txt}))
 
 ### Generate
 
@@ -110,10 +111,10 @@ prompt = ChatPromptTemplate.from_messages(
 rag_chain = prompt | llm | StrOutputParser()
 
 # Run
-question = "What is prompt?"
-docs = retriever.invoke(question)
-generation = rag_chain.invoke({"context": docs, "question": question})
-print(generation)
+# question = "What is prompt?"
+# docs = retriever.invoke(question)
+# generation = rag_chain.invoke({"context": docs, "question": question})
+# print(generation)
 
 ### Hallucination Grader
 
@@ -130,7 +131,7 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 hallucination_grader = prompt | llm | JsonOutputParser()
-hallucination_grader.invoke({"documents": docs, "generation": generation})
+# hallucination_grader.invoke({"documents": docs, "generation": generation})
 
 ### Answer Grader
 
@@ -156,7 +157,7 @@ prompt = ChatPromptTemplate.from_messages(
 )
 
 answer_grader = prompt | llm | JsonOutputParser()
-answer_grader.invoke({"question": question, "generation": generation})
+# answer_grader.invoke({"question": question, "generation": generation})
 
 from pprint import pprint
 from typing import List
